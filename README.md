@@ -41,7 +41,7 @@ This project is a Python-based document processor application that leverages Azu
 
 1. Run the application:
    ```
-   python document_processor.py
+   python contract-processor.py
    ```
 
 2. Select the directory containing the documents you wish to process using the "Browse" button.
