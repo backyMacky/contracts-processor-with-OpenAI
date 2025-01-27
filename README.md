@@ -22,7 +22,7 @@ This project is a Python-based document processor application that leverages Azu
 
 1. Clone the repository:
    ```
-   git clone https://github.com/yourusername/document-processor.git
+   git clone https://github.com/backymacky/contracts-processor-with-OpenAI.git
    ```
 
 2. Install the required Python packages:
