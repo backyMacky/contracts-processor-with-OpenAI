@@ -60,20 +60,39 @@ class LogHandler(logging.Handler):
                 break
         self.text_widget.after(100, self.update_widget)
 
-# Configuration Classes
+@dataclass(frozen=True)
+class OpenAIConfig:
+    api_key: str = field(default_factory=lambda: os.getenv("OPENAI_API_KEY", "OPENAI_API_KEY"))
+
+    @lru_cache(maxsize=1)
+    def create_client(self):
+        if not self.api_key:
+            logging.error("OpenAI API key is not set.")
+            raise ValueError("OpenAI API key is not set.")
+        
+        import openai
+        try:
+            openai.api_key = self.api_key
+            logging.info("OpenAI client configured successfully.")
+            return openai
+        except Exception as e:
+            logging.error(f"Failed to configure OpenAI client: {e}")
+            raise
+
 @dataclass(frozen=True)
 class AzureConfig:
     endpoint: str = field(default_factory=lambda: os.getenv("AZURE_ENDPOINT", "AZURE_ENDPOINT_URL"))
     deployment: str = field(default_factory=lambda: os.getenv("AZURE_DEPLOYMENT", "AZURE_DEVELOPMENT"))
     api_key: str = field(default_factory=lambda: os.getenv("AZURE_API_KEY", "AZURE_API_KEY"))
-    api_version: str = "2024-05-01-preview"
+    api_version: str = "API_VERSION"
 
     @lru_cache(maxsize=1)
     def create_client(self):
         if not self.endpoint or not self.api_key:
             logging.error("Azure endpoint or API key is not set.")
             raise ValueError("Azure endpoint or API key is not set.")
-       
+        
+        from openai import AzureOpenAI
         try:
             client = AzureOpenAI(
                 azure_endpoint=self.endpoint,
@@ -85,6 +104,18 @@ class AzureConfig:
         except Exception as e:
             logging.error(f"Failed to create AzureOpenAI client: {e}")
             raise
+
+@dataclass(frozen=True)
+class EndpointConfig:
+    use_azure: bool = False  # Set to False to use OpenAI instead of Azure
+    azure_config: AzureConfig = field(default_factory=AzureConfig)
+    openai_config: OpenAIConfig = field(default_factory=OpenAIConfig)
+
+    def create_client(self):
+        if self.use_azure:
+            return self.azure_config.create_client()
+        else:
+            return self.openai_config.create_client()
 
 @dataclass
 class ProcessingConfig:
@@ -101,9 +132,9 @@ class DocumentType(Enum):
     XLS = "application/vnd.ms-excel"
 
 class ContentAnalyzer:
-    def __init__(self, azure_config: AzureConfig):
-        self.client = azure_config.create_client()
-        self.deployment = azure_config.deployment
+    def __init__(self, endpoint_config: EndpointConfig):
+        self.client = endpoint_config.create_client()
+        self.deployment = endpoint_config.azure_config.deployment if endpoint_config.use_azure else None
         self.analysis_templates = {
             "contract_details": {
                 "system": """Analyze the contract and extract the following information:
@@ -111,7 +142,7 @@ class ContentAnalyzer:
                 2. End date: in the format DD/MM/YYYY
                 3. Contract duration
                 4. Key deliverables: per each key deliverable start in new line and with "- "
-               
+                
                 Make sure that you always reply for each point within the same line.
                 Avoid markdown, as the result is used for further processing.
                 """,
